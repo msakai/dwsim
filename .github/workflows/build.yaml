@@ -4,6 +4,16 @@ jobs:
   build:
     name: MSBuild
     runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - configuration: Release Linux
+            platform: x64
+          - configuration: Release WinMac
+            platform: x64
+          - configuration: Release WinMac
+            platform: x86
     steps:
     - uses: actions/checkout@v1
 
@@ -11,6 +21,6 @@ jobs:
       uses: microsoft/setup-msbuild@v1.0.2
 
     - name: MSBuild
-      run: msbuild
+      run: msbuild /p:configuration="${{ matrix.configuration }}" /p:platform=${{ matrix.platform }}
       shell: cmd
 
