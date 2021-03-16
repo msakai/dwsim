@@ -20,6 +20,10 @@ jobs:
     - name: Setup MSBuild.exe
       uses: microsoft/setup-msbuild@v1.0.2
 
+    - name: nuget restore
+      run: nuget.exe restore DWSIM6.sln -PackagesDirectory packages
+      shell: cmd
+
     - name: MSBuild
       run: msbuild /p:configuration="${{ matrix.configuration }}" /p:platform=${{ matrix.platform }}
       shell: cmd
