@@ -29,6 +29,6 @@ jobs:
       shell: cmd
       continue-on-error: true
 
-    - run: tree DistPackages
+    - run: tree
       shell: cmd
 
