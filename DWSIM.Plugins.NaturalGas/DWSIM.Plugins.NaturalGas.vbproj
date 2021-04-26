@@ -310,7 +310,7 @@ rd /s /q "$(SolutionDir)DistPackages\macOS\x64" 2&gt;nul 1&gt;nul 4&gt;nul
 erase /s /q "$(SolutionDir)DistPackages\Linux\plugins\*.dylib" 2&gt;nul 1&gt;nul 4&gt;nul
 rd /s /q "$(SolutionDir)DistPackages\Linux\x86" 2&gt;nul 1&gt;nul 4&gt;nul
 rd /s /q "$(SolutionDir)DistPackages\Linux\x64" 2&gt;nul 1&gt;nul 4&gt;nul
-)</PostBuildEvent>
+) || echo "PostBuildEvent failed" </PostBuildEvent>
   </PropertyGroup>
   <Import Project="..\packages\SkiaSharp.1.68.2.1\build\net45\SkiaSharp.targets" Condition="Exists('..\packages\SkiaSharp.1.68.2.1\build\net45\SkiaSharp.targets')" />
   <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
