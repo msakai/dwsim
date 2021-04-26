@@ -27,4 +27,8 @@ jobs:
     - name: MSBuild
       run: msbuild /p:configuration="${{ matrix.configuration }}" /p:platform=${{ matrix.platform }}
       shell: cmd
+      continue-on-error: true
+
+    - run: tree DistPackages
+      shell: cmd
 
