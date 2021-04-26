@@ -29,6 +29,14 @@ jobs:
       shell: cmd
       continue-on-error: true
 
-    - run: tree
+    - name: debug
+      run: |
+        dir DWSIM.Apps.TCPServer
+        dir DistPackages\Windows
+        dir DistPackages\Linux
+        dir DistPackages\macOS
+        dir DistPackages\*\plugins\*
+        tree DWSIM.Apps.TCPServer
+        dir DWSIM.Apps.TCPServer\bin
+        tree DWSIM.Plugins.NaturalGas
       shell: cmd
-
