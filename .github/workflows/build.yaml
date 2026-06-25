@@ -1,0 +1,56 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+# Cancel superseded runs while iterating with repeated pushes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: MSBuild ${{ matrix.configuration }}/${{ matrix.platform }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - configuration: ReleaseWinMac
+            platform: x64
+    steps:
+      - uses: actions/checkout@v4
+
+      # The runner image ships only newer targeting packs, but the projects
+      # target .NET Framework v4.6.1/v4.6.2 (v4.8 is already present).
+      - name: Install .NET Framework 4.6.1/4.6.2 targeting packs
+        shell: pwsh
+        run: |
+          choco install netfx-4.6.2-devpack -y --no-progress
+          choco install netfx-4.6.1-devpack -y --no-progress
+
+      # DWSIM.Plugins.NaturalGas has a post-build cleanup that runs
+      # `rd /s /q DistPackages\...` on folders that don't exist in a clean
+      # checkout; the final `rd` then returns errorlevel 1 and fails the build
+      # (MSB3073). Pre-creating the targets makes every `rd` succeed.
+      - name: Pre-create DistPackages folders
+        shell: pwsh
+        run: |
+          foreach ($root in 'Windows','Windows_32','macOS','Linux') {
+            foreach ($sub in 'plugins\x86','plugins\x64','x86','x64') {
+              New-Item -ItemType Directory -Force -Path "DistPackages\$root\$sub" | Out-Null
+            }
+          }
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Setup NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: NuGet restore
+        run: nuget restore DWSIM.sln
+
+      - name: MSBuild
+        run: msbuild DWSIM.sln /m /p:Configuration=${{ matrix.configuration }} /p:Platform=${{ matrix.platform }} /verbosity:minimal
