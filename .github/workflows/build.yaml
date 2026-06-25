@@ -19,6 +19,10 @@ jobs:
         include:
           - configuration: ReleaseWinMac
             platform: x64
+          - configuration: ReleaseWinMac
+            platform: x86
+          - configuration: ReleaseLinux
+            platform: x64
     steps:
       - uses: actions/checkout@v4
 
