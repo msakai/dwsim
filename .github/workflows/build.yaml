@@ -47,8 +47,12 @@ jobs:
             }
           }
 
+      # Use 64-bit MSBuild: MSBuild.ILMerge.Task runs ILMerge in-process, and the
+      # default 32-bit MSBuild runs out of memory merging DWSIM.Thermodynamics.StandaloneLibrary.
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
 
       - name: Setup NuGet
         uses: NuGet/setup-nuget@v2
@@ -56,5 +60,56 @@ jobs:
       - name: NuGet restore
         run: nuget restore DWSIM.sln
 
+      # Ad-hoc CI workarounds for two pre-existing ReleaseWinMac/x86 build
+      # problems (proper fixes tracked for separate PRs). See
+      # ci-releasewinmac-x86-issues.md for the full analysis.
+      - name: Stage extra reference DLLs (CI workarounds)
+        shell: pwsh
+        run: |
+          # Locate a restored package DLL by name, version-agnostically, preferring a
+          # .NET Framework (net4x) build, then netstandard2.0.
+          function Find-Dll($name) {
+            $c = Get-ChildItem -Path packages -Recurse -Filter "$name.dll" -ErrorAction SilentlyContinue
+            $m = $c | Where-Object { $_.FullName -match '\\lib\\net4' } | Select-Object -First 1
+            if (-not $m) { $m = $c | Where-Object { $_.FullName -match '\\lib\\netstandard2\.0' } | Select-Object -First 1 }
+            if (-not $m) { $m = $c | Select-Object -First 1 }
+            return $m
+          }
+
+          # Problem 1: DWSIM.Automation references DLLs via ..\DistPackages\Windows\*.dll,
+          # which are only produced mid-build by other projects' post-build copies. That
+          # race is lost under x86, so place the needed DLLs up front.
+          New-Item -ItemType Directory -Force -Path "DistPackages\Windows" | Out-Null
+          Copy-Item "DWSIM\References\ReoGrid.WinForms\unvell.ReoGrid.dll" "DistPackages\Windows\" -Force
+          $sharp = Find-Dll 'ICSharpCode.SharpZipLib'
+          if ($sharp) { Copy-Item $sharp.FullName "DistPackages\Windows\" -Force } else { Write-Warning "SharpZipLib not found" }
+
+          # Problem 2: DWSIM.Thermodynamics.StandaloneLibrary (x86-only) ILMerges its
+          # dependencies but cannot resolve several assemblies (System.Text.Json,
+          # System.IdentityModel.Tokens.Jwt, ...) that are referenced by merged inputs
+          # yet are neither merged nor copy-local. Stage every restored package assembly
+          # that is NOT itself merged (per ILMergeOrder.txt) into a directory used as
+          # ILMerge's library path, so the whole reference closure resolves at once.
+          $merged = @{}
+          Get-Content "DWSIM.Thermodynamics.StandaloneLibrary\ILMergeOrder.txt" |
+            Where-Object { $_ -and -not $_.TrimStart().StartsWith('#') } |
+            ForEach-Object { $merged[(($_ -replace '\.dll\s*$','').Trim()).ToLower()] = $true }
+
+          $libDir = Join-Path $env:GITHUB_WORKSPACE 'ilmerge-libs'
+          New-Item -ItemType Directory -Force -Path $libDir | Out-Null
+          $picked = @{}
+          Get-ChildItem -Path packages -Recurse -Filter *.dll -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\lib\\(net4|netstandard2\.0)' } |
+            ForEach-Object {
+              $base = $_.BaseName
+              if ($merged.ContainsKey($base.ToLower())) { return }
+              $isNet4 = $_.FullName -match '\\lib\\net4'
+              if (-not $picked.ContainsKey($base)) { $picked[$base] = $_ }
+              elseif ($isNet4 -and ($picked[$base].FullName -notmatch '\\lib\\net4')) { $picked[$base] = $_ }
+            }
+          $picked.Values | ForEach-Object { Copy-Item $_.FullName $libDir -Force }
+          Write-Host "DistPackages\Windows DLLs:"; Get-ChildItem "DistPackages\Windows" -Filter *.dll | Select-Object -ExpandProperty Name
+          Write-Host ("Staged {0} library DLLs for ILMerge." -f $picked.Count)
+
       - name: MSBuild
-        run: msbuild DWSIM.sln /m /p:Configuration=${{ matrix.configuration }} /p:Platform=${{ matrix.platform }} /verbosity:minimal
+        run: msbuild DWSIM.sln /m /p:Configuration=${{ matrix.configuration }} /p:Platform=${{ matrix.platform }} /p:ILMergeLibraryPath="${{ github.workspace }}\ilmerge-libs" /verbosity:minimal
